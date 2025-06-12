@@ -167,30 +167,39 @@ def es_recurso_etiquetable(arn):
 
 def asignar_etiquetas_comunes(etiquetas):
     from collections import defaultdict
-    etiquetados_por_tipo = defaultdict(list)
     etiquetas_con_added = etiquetas.copy()
     etiquetas_con_added["Added"] = "Yes"
     recursos_etiquetados_exitosos = []
+    etiquetados_por_tipo = defaultdict(list)
     client = CLIENT
     arns_to_tag = []
+    
     paginator = client.get_paginator('get_resources')
     page_iterator = paginator.paginate(ResourcesPerPage=50)
+    
     for page in page_iterator:
         for resource in page['ResourceTagMappingList']:
             arns_to_tag.append(resource['ResourceARN'])
+    
     print("⏳ Procesando asignación de etiquetas...")
+
     for i in range(0, len(arns_to_tag), 20):
         batch = arns_to_tag[i:i + 20]
         filtered_batch = []
         for arn in batch:
-            if not es_recurso_etiquetable(arn): continue
+            if not es_recurso_etiquetable(arn):
+                print(f"⚠️ Recurso no etiquetable (omitido): {arn} — contiene palabra reservada")
+                continue
             try:
                 tags_response = client.get_resources(ResourceARNList=[arn])
                 tag_map = tags_response['ResourceTagMappingList']
                 if tag_map and not tag_map[0].get('Tags'):
                     filtered_batch.append(arn)
-            except: continue
-        if not filtered_batch: continue
+            except Exception as e:
+                print(f"❌ Error al obtener etiquetas de {arn}: {e}")
+                continue
+        if not filtered_batch:
+            continue
         try:
             response = client.tag_resources(ResourceARNList=filtered_batch, Tags=etiquetas_con_added)
             failed_map = response.get("FailedResourcesMap", {})
@@ -199,7 +208,10 @@ def asignar_etiquetas_comunes(etiquetas):
                     recursos_etiquetados_exitosos.append(arn)
                     tipo = infer_resource_type(arn)
                     etiquetados_por_tipo[tipo].append(arn)
-        except: continue
+        except Exception as e:
+            print(f"❌ Error al etiquetar lote: {e}")
+            continue
+
     output_txt = os.path.join(OUTPUT_DIR, f"recursos_etiquetados_{perfil}.txt")
     with open(output_txt, "w", encoding="utf-8") as f:
         for tipo in sorted(etiquetados_por_tipo.keys()):
@@ -208,6 +220,7 @@ def asignar_etiquetas_comunes(etiquetas):
                 f.write(f"- {arn}\n")
                 print(f"✅ Etiquetado: {arn}")
             f.write("\n")
+    
     print(f"📝 Se exportó la lista de recursos etiquetados en '{output_txt}'")
 
 def eliminar_etiquetas_comunes(etiquetas):

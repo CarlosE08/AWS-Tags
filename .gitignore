@@ -1,0 +1,5 @@
+# Ignorar todas las carpetas
+*/
+
+# Pero no ignorar la carpeta Principal/
+!Principal/
