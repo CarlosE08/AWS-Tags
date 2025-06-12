@@ -1,0 +1,5 @@
+Owner_iNBest = Carlos Escobar
+Cliente      = iNBest
+Proyecto     = Prueba etiquetas
+Contacto     = Carlos Escobar
+Ambiente     = QA
