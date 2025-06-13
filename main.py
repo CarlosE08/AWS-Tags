@@ -91,22 +91,31 @@ def autofit_columns(worksheet):
             except: pass
         worksheet.column_dimensions[column_letter].width = max_length + 2
 
-def evaluar_etiquetabilidad(arn):
+def evaluar_etiquetabilidad(arn, name=None):
     import re
 
     palabras_reservadas = [
         "controltower", "awscontroltower",
         "awscontrolttowermanagedrule", "awsmanaged"
     ]
+
+    # Validación por ARN
     arn_lower = arn.lower()
     if any(p in arn_lower for p in palabras_reservadas):
-        return False, "Contiene palabra reservada"
+        return False, "Contiene palabra reservada en ARN"
 
+    # Validación por nombre (si se proporciona)
+    if name:
+        name_lower = name.lower()
+        if any(p in name_lower for p in palabras_reservadas):
+            return False, "Contiene palabra reservada en nombre"
+
+    # Validación de formato
     arn_pattern = r"^arn:aws:[a-z0-9-]+:[a-z0-9-]*:\d{12}:.+"
     if not re.match(arn_pattern, arn):
         return False, "ARN no válido"
 
-    # Validación de servicios soportados por Resource Groups Tagging API
+    # Validación de servicios no soportados
     servicios_no_etiquetables = [
         "payments", "support", "budgets", "cur", "ce", "health",
         "account", "marketplace", "license-manager", "pricing"
@@ -166,7 +175,7 @@ def export_to_excel(resources_with_tags, resources_without_tags):
         for res in without_tag_groups[rtype]:
             arn = res['ARN']
             name = res['Name']
-            es_etiquetable, motivo = evaluar_etiquetabilidad(arn)
+            es_etiquetable, motivo = evaluar_etiquetabilidad(arn, name)
             estado = "Sí" if es_etiquetable else "No"
             ws2.append([arn, name, estado, motivo])
     autofit_columns(ws2)
