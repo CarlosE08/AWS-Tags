@@ -1,5 +1,6 @@
-import boto3
 import os
+import boto3
+import re
 from botocore.exceptions import ClientError, ProfileNotFound
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
@@ -90,6 +91,32 @@ def autofit_columns(worksheet):
             except: pass
         worksheet.column_dimensions[column_letter].width = max_length + 2
 
+def evaluar_etiquetabilidad(arn):
+    import re
+
+    palabras_reservadas = [
+        "controltower", "awscontroltower",
+        "awscontrolttowermanagedrule", "awsmanaged"
+    ]
+    arn_lower = arn.lower()
+    if any(p in arn_lower for p in palabras_reservadas):
+        return False, "Contiene palabra reservada"
+
+    arn_pattern = r"^arn:aws:[a-z0-9-]+:[a-z0-9-]*:\d{12}:.+"
+    if not re.match(arn_pattern, arn):
+        return False, "ARN no válido"
+
+    # Validación de servicios soportados por Resource Groups Tagging API
+    servicios_no_etiquetables = [
+        "payments", "support", "budgets", "cur", "ce", "health",
+        "account", "marketplace", "license-manager", "pricing"
+    ]
+    servicio = arn.split(":")[2].lower()
+    if servicio in servicios_no_etiquetables:
+        return False, f"Servicio no soportado: {servicio.upper()}"
+
+    return True, ""
+
 def export_to_excel(resources_with_tags, resources_without_tags):
     wb = Workbook()
     ws1 = wb.active
@@ -120,8 +147,9 @@ def export_to_excel(resources_with_tags, resources_without_tags):
                 cell.fill = PatternFill(start_color=COLOR_ADDED, end_color=COLOR_ADDED, fill_type="solid")
     autofit_columns(ws1)
 
+    # Hoja 2: Sin etiquetas
     ws2 = wb.create_sheet("SinEtiquetas")
-    ws2.append(["ARN", "Nombre"])
+    ws2.append(["ARN", "Nombre", "¿Es etiquetable?", "Motivo"])
     without_tag_groups = {}
     for res in resources_without_tags:
         rtype = res['Type']
@@ -129,16 +157,21 @@ def export_to_excel(resources_with_tags, resources_without_tags):
     for rtype in sorted(without_tag_groups.keys()):
         ws2.append([f"# {rtype}"])
         row_idx = ws2.max_row
-        for col in range(1, 3):
+        for col in range(1, 5):
             cell = ws2.cell(row=row_idx, column=col)
             cell.font = Font(bold=True, size=14)
             cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
             cell.alignment = Alignment(horizontal='center', vertical='center')
         ws2.row_dimensions[row_idx].height = 30
         for res in without_tag_groups[rtype]:
-            ws2.append([res['ARN'], res['Name']])
+            arn = res['ARN']
+            name = res['Name']
+            es_etiquetable, motivo = evaluar_etiquetabilidad(arn)
+            estado = "Sí" if es_etiquetable else "No"
+            ws2.append([arn, name, estado, motivo])
     autofit_columns(ws2)
 
+    # Hoja 3: Resumen
     ws3 = wb.create_sheet("Resumen")
     total = len(resources_with_tags) + len(resources_without_tags)
     ws3.append(["Métrica", "Valor"])
