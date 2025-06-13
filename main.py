@@ -173,21 +173,28 @@ def asignar_etiquetas_comunes(etiquetas):
     etiquetados_por_tipo = defaultdict(list)
     client = CLIENT
     arns_to_tag = []
-    
+
     paginator = client.get_paginator('get_resources')
     page_iterator = paginator.paginate(ResourcesPerPage=50)
-    
+
     for page in page_iterator:
         for resource in page['ResourceTagMappingList']:
             arns_to_tag.append(resource['ResourceARN'])
-    
+
     print("⏳ Procesando asignación de etiquetas...")
+
+    warning_printed = False
+    error_printed = False
+    success_printed = False
 
     for i in range(0, len(arns_to_tag), 20):
         batch = arns_to_tag[i:i + 20]
         filtered_batch = []
         for arn in batch:
             if not es_recurso_etiquetable(arn):
+                if not warning_printed:
+                    print()  # Salto de línea antes del primer ⚠️
+                    warning_printed = True
                 print(f"⚠️ Recurso no etiquetable (omitido): {arn} — contiene palabra reservada")
                 continue
             try:
@@ -196,6 +203,9 @@ def asignar_etiquetas_comunes(etiquetas):
                 if tag_map and not tag_map[0].get('Tags'):
                     filtered_batch.append(arn)
             except Exception as e:
+                if not error_printed:
+                    print()  # Salto de línea antes del primer ❌
+                    error_printed = True
                 print(f"❌ Error al obtener etiquetas de {arn}: {e}")
                 continue
         if not filtered_batch:
@@ -209,8 +219,15 @@ def asignar_etiquetas_comunes(etiquetas):
                     tipo = infer_resource_type(arn)
                     etiquetados_por_tipo[tipo].append(arn)
         except Exception as e:
+            if not error_printed:
+                print()  # Salto de línea antes del primer ❌ si ocurre aquí
+                error_printed = True
             print(f"❌ Error al etiquetar lote: {e}")
             continue
+
+    if recursos_etiquetados_exitosos:
+        print()  # Salto de línea antes del primer ✅
+        success_printed = True
 
     output_txt = os.path.join(OUTPUT_DIR, f"recursos_etiquetados_{perfil}.txt")
     with open(output_txt, "w", encoding="utf-8") as f:
@@ -218,10 +235,10 @@ def asignar_etiquetas_comunes(etiquetas):
             f.write(f"# {tipo}\n")
             for arn in etiquetados_por_tipo[tipo]:
                 f.write(f"- {arn}\n")
-                print(f"✅ Etiquetado: {arn}")
+                print(f"✅ Recurso etiquetado correctamente: {arn}")
             f.write("\n")
-    
-    print(f"📝 Se exportó la lista de recursos etiquetados en '{output_txt}'")
+
+    print(f"\n📝 Se exportó la lista de recursos etiquetados en '{output_txt}'")
 
 def eliminar_etiquetas_comunes(etiquetas):
     client = CLIENT
