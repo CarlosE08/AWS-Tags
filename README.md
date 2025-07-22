@@ -115,11 +115,3 @@ Puedes modificar:
 - Palabras reservadas para evitar etiquetado (`es_recurso_etiquetable`)
 
 ---
-
-## 📣 Créditos
-
-Desarrollado por [Carlos Escobar](mailto:carlos.escobar@inbest.cloud) para facilitar el cumplimiento de políticas de etiquetado en AWS.
-
----
-
-¡Etiqueta con confianza y genera visibilidad sobre tus recursos en la nube! ☁️✅
